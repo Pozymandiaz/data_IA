@@ -4,3 +4,6 @@
 # Ignorer les fichiers pyc et dossiers __pycache__
 *.pyc
 __pycache__/
+
+generated_scene.py
+renders/
