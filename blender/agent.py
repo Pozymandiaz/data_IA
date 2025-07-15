@@ -24,6 +24,7 @@ PROMPT = (
     "Ne génère que du code Python sans commentaires ni balises Markdown."
 )
 
+blender_exec = r"C:\Program Files\Blender Foundation\Blender 4.4\blender.exe"
 
 def prompt_to_blender_code(prompt: str) -> str:
     url = "https://api.mistral.ai/v1/chat/completions"
@@ -48,7 +49,7 @@ def prompt_to_blender_code(prompt: str) -> str:
         response = requests.post(url, headers=headers, json=data)
         if response.status_code == 429:
             print("⚠️ API saturée, nouvelle tentative dans 30s...")
-            time.sleep(30)
+            time.sleep(60)
             continue
         elif response.status_code != 200:
             raise RuntimeError(f"Erreur API : {response.status_code} - {response.text}")
