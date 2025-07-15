@@ -1,53 +1,41 @@
 import bpy
-import math
-
-bpy.context.scene.render.engine = 'BLENDER_EEVEE_NEXT'
-
-def clear_scene():
-    bpy.ops.object.select_all(action='SELECT')
-    bpy.ops.object.delete()
-
-def create_ground():
-    bpy.ops.mesh.primitive_plane_add(size=50, enter_editmode=False, align='WORLD', location=(0, 0, 0))
-    ground = bpy.context.active_object
-    ground.name = "Ground"
-
+import os
+bpy.ops.object.select_all(action='SELECT')
+bpy.ops.object.delete()
+bpy.ops.mesh.primitive_plane_add(size=20, enter_editmode=False, align='WORLD', location=(0, 0, 0), scale=(1, 1, 1))
+sol = bpy.context.active_object
+mat_sol = bpy.data.materials.new(name="Mat_Sol")
+mat_sol.diffuse_color = (0.1, 0.7, 0.1, 1)
+sol.data.materials.append(mat_sol)
+bpy.ops.mesh.primitive_plane_add(size=10, enter_editmode=False, align='WORLD', location=(0, 0, 0.01), scale=(0.5, 2, 1))
+riviere = bpy.context.active_object
+mat_riviere = bpy.data.materials.new(name="Mat_Riviere")
+mat_riviere.diffuse_color = (0.0, 0.3, 0.7, 0.8)
+riviere.data.materials.append(mat_riviere)
 def create_tree(x, y):
-    bpy.ops.mesh.primitive_cone_add(vertices=32, radius1=1, radius2=0.5, depth=3, end_fill_type='NGON', enter_editmode=False, align='WORLD', location=(x, y, 0))
-    trunk = bpy.context.active_object
-    trunk.name = f"Tree_Trunk_{x}_{y}"
-
-    bpy.ops.mesh.primitive_cone_add(vertices=32, radius1=2, radius2=0, depth=3, end_fill_type='NGON', enter_editmode=False, align='WORLD', location=(x, y, 3))
-    foliage = bpy.context.active_object
-    foliage.name = f"Tree_Foliage_{x}_{y}"
-
-def create_river():
-    bpy.ops.mesh.primitive_plane_add(size=2, enter_editmode=False, align='WORLD', location=(0, 0, 0.1))
-    river = bpy.context.active_object
-    river.name = "River"
-    river.scale = (30, 5, 1)
-
-def setup_light():
-    bpy.ops.object.light_add(type='SUN', align='WORLD', location=(10, -10, 20))
-    light = bpy.context.active_object
-    light.data.energy = 2.0
-    light.name = "Sun"
-
-def setup_camera():
-    bpy.ops.object.camera_add(enter_editmode=False, align='VIEW', location=(20, -20, 20), rotation=(math.radians(60), 0, math.radians(45)))
-    camera = bpy.context.active_object
-    camera.name = "Camera"
-    bpy.context.scene.camera = camera
-
-def main():
-    clear_scene()
-    create_ground()
-    create_tree(5, 5)
-    create_tree(-5, 5)
-    create_tree(0, -10)
-    create_river()
-    setup_light()
-    setup_camera()
-
-if __name__ == "__main__":
-    main()
+    bpy.ops.mesh.primitive_cone_add(vertices=32, radius1=0.3, radius2=0.1, depth=1, end_fill_type='NGON', enter_editmode=False, align='WORLD', location=(x, y, 0.5), scale=(1, 1, 1))
+    tronc = bpy.context.active_object
+    mat_tronc = bpy.data.materials.new(name="Mat_Tronc")
+    mat_tronc.diffuse_color = (0.2, 0.1, 0.0, 1)
+    tronc.data.materials.append(mat_tronc)
+    bpy.ops.mesh.primitive_uv_sphere_add(radius=0.7, enter_editmode=False, align='WORLD', location=(x, y, 1.5), scale=(1, 1, 1))
+    feuillage = bpy.context.active_object
+    mat_feuillage = bpy.data.materials.new(name="Mat_Feuillage")
+    mat_feuillage.diffuse_color = (0.0, 0.5, 0.0, 1)
+    feuillage.data.materials.append(mat_feuillage)
+create_tree(-2, 0)
+create_tree(0, 0)
+create_tree(2, 0)
+bpy.ops.object.light_add(type='SUN', align='WORLD', location=(5, 5, 10), scale=(1, 1, 1))
+soleil = bpy.context.active_object
+soleil.data.energy = 2.0
+bpy.ops.object.camera_add(enter_editmode=False, align='VIEW', location=(5, -5, 5), rotation=(1.0, 0.0, 0.7), scale=(1, 1, 1))
+camera = bpy.context.active_object
+bpy.context.scene.camera = camera
+import bpy
+import os
+output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'renders')
+os.makedirs(output_dir, exist_ok=True)
+filepath = os.path.join(output_dir, 'render.png')
+bpy.context.scene.render.filepath = filepath
+bpy.ops.render.render(write_still=True)

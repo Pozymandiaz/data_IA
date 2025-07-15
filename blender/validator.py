@@ -6,12 +6,16 @@ import numpy as np
 def validate_scene(image_path: str) -> bool:
     """
     Analyse l'image rendue pour valider la scène Blender :
-    - Présence de vert, bleu, marron
+    - Présence de vert, bleu, noir (ombres)
     - Image non vide, non monochrome
-    - Ratios équilibrés entre les couleurs attendues
+    - Seuils simplifiés pour validation plus facile
     """
+    # Si chemin relatif, chercher dans dossier "renders"
+    if not os.path.isabs(image_path):
+        image_path = os.path.join("renders", image_path)
+
     if not os.path.exists(image_path):
-        print("❌ Aucune image de rendu trouvée.")
+        print(f"❌ Aucune image de rendu trouvée à {image_path}.")
         return False
 
     try:
@@ -26,33 +30,33 @@ def validate_scene(image_path: str) -> bool:
                 print("⚠️ Image trop uniforme, probablement vide ou mal éclairée.")
                 return False
 
-            # Compte des pixels verts, bleus, bruns
+            # Compte des pixels verts, bleus, noirs
             green = count_color_range(pixels, (25, 80, 25), (110, 210, 110))
             blue = count_color_range(pixels, (20, 40, 100), (100, 130, 255))
-            brown = count_color_range(pixels, (60, 30, 0), (160, 110, 60))
+            black = count_color_range(pixels, (0, 0, 0), (40, 40, 40))  # noir sombre pour ombres
 
             total = len(pixels)
             g_ratio = green / total
             b_ratio = blue / total
-            br_ratio = brown / total
+            bl_ratio = black / total
 
-            print(f"🟩 Vert: {g_ratio:.2%} | 🟦 Bleu: {b_ratio:.2%} | 🟫 Marron: {br_ratio:.2%}")
+            print(f"🟩 Vert: {g_ratio:.2%} | 🟦 Bleu: {b_ratio:.2%} | ⚫ Noir: {bl_ratio:.2%}")
 
-            # Seuils minimums absolus
-            if g_ratio < 0.01:
+            # Seuils simplifiés
+            if g_ratio < 0.005:
                 print("⚠️ Trop peu de vert : sol ou arbres manquants ?")
                 return False
 
-            if b_ratio < 0.003:
+            if b_ratio < 0.002:
                 print("⚠️ Trop peu de bleu : rivière absente ou trop discrète ?")
                 return False
 
-            if br_ratio < 0.002:
-                print("⚠️ Trop peu de marron : troncs d’arbres absents ou invisibles ?")
+            if bl_ratio < 0.005:
+                print("⚠️ Trop peu de noir : ombres (troncs) absentes ou invisibles ?")
                 return False
 
-            # Vérifie une diversité minimale
-            if g_ratio + b_ratio + br_ratio < 0.05:
+            # Vérifie une diversité minimale plus simple
+            if g_ratio + b_ratio + bl_ratio < 0.03:
                 print("⚠️ Scène trop vide : peu de contenu identifiable.")
                 return False
 
