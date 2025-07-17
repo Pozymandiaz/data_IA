@@ -3,7 +3,7 @@ import subprocess
 import requests
 import time
 from dotenv import load_dotenv
-from validator import validate_scene
+from validator import validate_scene, analyze_script
 
 load_dotenv()
 
@@ -14,13 +14,21 @@ MAX_ATTEMPTS = 6
 
 # Prompt simplifié et sans options qui n'existent pas
 PROMPT = (
-    "Crée un script Python Blender 4.4 qui génère une scène simple :\n"
-    "- Sol vert (plane, couleur RGBA 0.1, 0.7, 0.1, 1)\n"
-    "- Rivière visible (plane, couleur RGBA 0.0, 0.3, 0.7, 0.8) au centre\n"
-    "- Trois arbres avec tronc cône marron (0.2, 0.1, 0.0, 1) et feuillage sphère verte (0.0, 0.5, 0.0, 1)\n"
-    "- Lumière soleil\n"
-    "- Caméra en vue 3/4 de haut\n"
-    "- Le rendu sauvegardé dans un fichier 'render.png' situé dans le même dossier que le script.\n"
+    "Crée un script Python pour Blender 4.4 qui génère une scène naturelle cohérente :\n"
+    "- Un sol vert (plane de 50x50 unités, couleur RGBA 0.1, 0.7, 0.1, 1), centré à l'origine (0, 0, 0)\n"
+    "- Une rivière rectangulaire (plane bleue RGBA 0.0, 0.3, 0.7, 0.8), de 4 unités de large (axe X) et 50 unités de long (axe Y), légèrement surélevée (Z=0.01), positionnée au centre du sol (location : (0, 0, 0.01))\n"
+    "  * La géométrie doit être réellement rectangulaire (pas juste un plane avec scale visuel)\n"
+    "- Une forêt : génère automatiquement une quinzaine d'arbres répartis aléatoirement sur le sol en évitant la zone de la rivière (c'est-à-dire à plus de 2 unités en X du centre)\n"
+    "  * Chaque arbre se compose de :\n"
+    "    - un tronc (cône, couleur marron RGBA 0.2, 0.1, 0.0, 1)\n"
+    "    - un feuillage (sphère verte RGBA 0.0, 0.5, 0.0, 1), placé au-dessus du tronc\n"
+    "- Une lumière de type 'SUN' placée en hauteur\n"
+    "- Trois caméras à activer successivement, avec rendu PNG pour chacune :\n"
+    "    1. Vue 3/4 depuis le coin nord-ouest (exemple : location (-20, -20, 20), rotation adaptée)\n"
+    "    2. Vue du dessus (exemple : location (0, 0, 60), orientée vers le bas)\n"
+    "    3. Vue ras du sol, centrée sur la rivière (exemple : location (0, -10, 1.5), regardant vers (0, 0, 1))\n"
+    "- Pour chaque caméra : définis-la comme active, effectue le rendu, puis sauvegarde l'image PNG dans un dossier 'renders' situé à côté du script\n"
+    "- Nomme les fichiers 'render_1.png', 'render_2.png' et 'render_3.png'\n"
     "Ne génère que du code Python sans commentaires ni balises Markdown."
 )
 
@@ -119,6 +127,9 @@ if __name__ == "__main__":
             code = patch_script(code)
             save_script(code, SCRIPT_FILENAME)
             run_blender_script(SCRIPT_FILENAME)
+
+            feedback = analyze_script(SCRIPT_FILENAME)
+            print("📄 Analyse du script :", feedback)
 
             if validate_scene(RENDER_FILENAME):
                 print("✅ Scène validée !")

@@ -62,14 +62,13 @@ def validate_scene(image_path: str) -> bool:
                 return False
             blue_mask = get_color_mask(data, (20, 40, 100), (100, 130, 255))
 
-            # Masque vert (feuillage) + marron (troncs)
+           
             green_mask = get_color_mask(data, (25, 80, 25), (110, 210, 110))
-            brown_mask = get_color_mask(data, (60, 30, 0), (150, 90, 40))  # approx tronc marron
+            brown_mask = get_color_mask(data, (60, 30, 0), (150, 90, 40))  
 
-            # Masque arbre (vert ou marron)
+            
             tree_mask = green_mask | brown_mask
 
-            # On vérifie s'il y a des pixels d'arbres directement sur du bleu
             overlap = np.logical_and(tree_mask, blue_mask)
 
             if np.any(overlap):
@@ -98,3 +97,49 @@ def get_color_mask(data, lower, upper):
     upper = np.array(upper, dtype=np.uint8)
     mask = np.all((data >= lower) & (data <= upper), axis=2)
     return mask
+
+def is_river_wide_enough(blue_mask, min_width_pixels=30):
+    # Mesure la largeur max de la rivière sur chaque ligne
+    max_width = 0
+    for row in blue_mask:
+        row_width = np.count_nonzero(row)
+        max_width = max(max_width, row_width)
+    return max_width >= min_width_pixels
+
+import re
+
+def analyze_script(filepath):
+    with open(filepath, "r", encoding="utf-8") as f:
+        code = f.read()
+
+    # Extraction brutale (améliorable)
+    tree_positions = re.findall(r'create_tree\((-?\d+),\s*(-?\d+)\)', code)
+    river_scale = re.search(r'scale=\((\d+\.?\d*),\s*(\d+\.?\d*),', code)
+    river_center = re.search(r'location=\(([\d\.\-]+),\s*([\d\.\-]+),', code)
+
+    feedback = {}
+
+    if tree_positions:
+        positions = [(int(x), int(y)) for x, y in tree_positions]
+        feedback['tree_positions'] = positions
+
+    if river_scale and river_center:
+        rx, ry = float(river_scale.group(1)), float(river_scale.group(2))
+        cx, cy = float(river_center.group(1)), float(river_center.group(2))
+        feedback['river'] = {
+            'scale': (rx, ry),
+            'center': (cx, cy),
+            'bounds_y': (cy - ry * 1, cy + ry * 1)  # grossière estimation Y
+        }
+
+        # Détection d’arbres dans la rivière
+        in_river = [
+            (x, y) for x, y in positions
+            if feedback['river']['bounds_y'][0] <= y <= feedback['river']['bounds_y'][1]
+        ]
+        if in_river:
+            feedback['issue'] = f"{len(in_river)} arbre(s) dans la rivière : {in_river}"
+        else:
+            feedback['issue'] = None
+
+    return feedback
