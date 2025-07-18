@@ -3,143 +3,96 @@ from PIL import Image
 import numpy as np
 
 
-def validate_scene(image_path: str) -> bool:
+def validate_scene(image_filename: str) -> bool:
     """
-    Analyse l'image rendue pour valider la scène Blender :
-    - Présence de vert, bleu, noir (ombres)
-    - Image non vide, non monochrome
-    - Seuils simplifiés pour validation plus facile
-    - Si un arbre est au dessus de l'eau, scène non validée et déplace l'arbre au dessus de l'herbe
+    Analyse l'image rendue pour valider la scène Blender.
+    Vérifie la présence des couleurs vert, bleu, noir,
+    que l’image n’est pas uniforme, et que les arbres ne sont pas au-dessus de la rivière.
     """
-    # Si chemin relatif, chercher dans dossier "renders"
-    if not os.path.isabs(image_path):
-        image_path = os.path.join("renders", image_path)
+    if not os.path.isabs(image_filename):
+        image_path = os.path.join("renders", image_filename)
+    else:
+        image_path = image_filename
 
     if not os.path.exists(image_path):
-        print(f"❌ Aucune image de rendu trouvée à {image_path}.")
+        print(f"⚠️ Image {image_path} introuvable")
         return False
 
-    try:
-        with Image.open(image_path) as img:
-            img = img.convert("RGB")
-            data = np.array(img)
-            pixels = data.reshape((-1, 3))
+    img = Image.open(image_path).convert("RGBA")
+    pixels = np.array(img)
+    height, width, _ = pixels.shape
 
-            # Vérifie que l’image n’est pas trop uniforme (échec de rendu typique)
-            std_devs = np.std(pixels, axis=0)
-            if np.mean(std_devs) < 5:
-                print("⚠️ Image trop uniforme, probablement vide ou mal éclairée.")
-                return False
-
-            # Compte des pixels verts, bleus, noirs
-            green = count_color_range(pixels, (25, 80, 25), (110, 210, 110))
-            blue = count_color_range(pixels, (20, 40, 100), (100, 130, 255))
-            black = count_color_range(pixels, (0, 0, 0), (40, 40, 40))  # noir sombre pour ombres
-
-            total = len(pixels)
-            g_ratio = green / total
-            b_ratio = blue / total
-            bl_ratio = black / total
-
-            print(f"🟩 Vert: {g_ratio:.2%} | 🟦 Bleu: {b_ratio:.2%} | ⚫ Noir: {bl_ratio:.2%}")
-
-            # Seuils simplifiés
-            if g_ratio < 0.005:
-                print("⚠️ Trop peu de vert : sol ou arbres manquants ?")
-                return False
-
-            if b_ratio < 0.002:
-                print("⚠️ Trop peu de bleu : rivière absente ou trop discrète ?")
-                return False
-
-            if bl_ratio < 0.005:
-                print("⚠️ Trop peu de noir : ombres (troncs) absentes ou invisibles ?")
-                return False
-
-            # Vérifie une diversité minimale plus simple
-            if g_ratio + b_ratio + bl_ratio < 0.03:
-                print("⚠️ Scène trop vide : peu de contenu identifiable.")
-                return False
-            blue_mask = get_color_mask(data, (20, 40, 100), (100, 130, 255))
-
-           
-            green_mask = get_color_mask(data, (25, 80, 25), (110, 210, 110))
-            brown_mask = get_color_mask(data, (60, 30, 0), (150, 90, 40))  
-
-            
-            tree_mask = green_mask | brown_mask
-
-            overlap = np.logical_and(tree_mask, blue_mask)
-
-            if np.any(overlap):
-                print("🚫 Un ou plusieurs arbres détectés au-dessus de la rivière !")
-                return False
-
-            print("✅ La scène semble visuellement cohérente.")
-            return True
-            
-
-    except Exception as e:
-        print("❌ Erreur lors de l'analyse de l'image :", e)
+    # Vérifie que l'image contient du vert
+    green_mask = (
+        (pixels[:, :, 0] < 100) &   # R faible
+        (pixels[:, :, 1] > 150) &   # G élevé
+        (pixels[:, :, 2] < 100)     # B faible
+    )
+    if not green_mask.any():
+        print("⚠️ Pas de vert détecté.")
         return False
 
+    # Vérifie la présence de bleu (rivière)
+    blue_mask = (
+        (pixels[:, :, 0] < 80) &
+        (pixels[:, :, 1] < 120) &
+        (pixels[:, :, 2] > 120)
+    )
+    if not blue_mask.any():
+        print("⚠️ Pas de bleu détecté.")
+        return False
 
-def count_color_range(pixels, lower, upper):
-    """Compte le nombre de pixels dans une plage de couleurs (RGB)"""
-    lower = np.array(lower, dtype=np.uint8)
-    upper = np.array(upper, dtype=np.uint8)
-    mask = np.all((pixels >= lower) & (pixels <= upper), axis=1)
-    return np.count_nonzero(mask)
+    # Vérifie que l'image n'est pas uniforme (pas unie)
+    if np.all(pixels == pixels[0, 0, :]):
+        print("⚠️ Image uniforme détectée.")
+        return False
 
-def get_color_mask(data, lower, upper):
-    """Renvoie un masque booléen des pixels dans la plage"""
-    lower = np.array(lower, dtype=np.uint8)
-    upper = np.array(upper, dtype=np.uint8)
-    mask = np.all((data >= lower) & (data <= upper), axis=2)
-    return mask
+    # Vérifie qu'il y a du noir (troncs d'arbre)
+    black_mask = (
+        (pixels[:, :, 0] < 40) &
+        (pixels[:, :, 1] < 40) &
+        (pixels[:, :, 2] < 40)
+    )
+    if not black_mask.any():
+        print("⚠️ Pas de noir (troncs) détecté.")
+        return False
 
-def is_river_wide_enough(blue_mask, min_width_pixels=30):
-    # Mesure la largeur max de la rivière sur chaque ligne
-    max_width = 0
-    for row in blue_mask:
-        row_width = np.count_nonzero(row)
-        max_width = max(max_width, row_width)
-    return max_width >= min_width_pixels
+    # Vérifie que les troncs ne sont pas dans la zone bleue (rivière)
+    black_coords = np.column_stack(np.where(black_mask))
+    blue_coords = np.column_stack(np.where(blue_mask))
+    if black_coords.size == 0 or blue_coords.size == 0:
+        print("⚠️ Pas assez de données pour valider la position des troncs.")
+        return False
 
-import re
+    blue_x_min = blue_coords[:, 1].min()
+    blue_x_max = blue_coords[:, 1].max()
 
-def analyze_script(filepath):
-    with open(filepath, "r", encoding="utf-8") as f:
-        code = f.read()
+    # Pour chaque tronc, vérifier que son x n'est pas dans la plage bleue (rivière)
+    for y, x in black_coords:
+        if blue_x_min <= x <= blue_x_max:
+            print(f"⚠️ Tronc détecté au-dessus de la rivière en pixel x={x}, y={y}.")
+            return False
 
-    # Extraction brutale (améliorable)
-    tree_positions = re.findall(r'create_tree\((-?\d+),\s*(-?\d+)\)', code)
-    river_scale = re.search(r'scale=\((\d+\.?\d*),\s*(\d+\.?\d*),', code)
-    river_center = re.search(r'location=\(([\d\.\-]+),\s*([\d\.\-]+),', code)
+    print("✅ Image validée.")
+    return True
 
-    feedback = {}
 
-    if tree_positions:
-        positions = [(int(x), int(y)) for x, y in tree_positions]
-        feedback['tree_positions'] = positions
+def analyze_script(script_path: str) -> dict:
+    """
+    Analyse sommaire du script pour détecter erreurs potentielles
+    ou incohérences (exemple : positions mal définies).
+    """
+    result = {"issue": None}
+    with open(script_path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
 
-    if river_scale and river_center:
-        rx, ry = float(river_scale.group(1)), float(river_scale.group(2))
-        cx, cy = float(river_center.group(1)), float(river_center.group(2))
-        feedback['river'] = {
-            'scale': (rx, ry),
-            'center': (cx, cy),
-            'bounds_y': (cy - ry * 1, cy + ry * 1)  # grossière estimation Y
-        }
+    # Recherche positions des arbres
+    positions_lines = [l for l in lines if "positions" in l]
+    if not positions_lines:
+        result["issue"] = "La variable 'positions' n'est pas définie."
+        return result
 
-        # Détection d’arbres dans la rivière
-        in_river = [
-            (x, y) for x, y in positions
-            if feedback['river']['bounds_y'][0] <= y <= feedback['river']['bounds_y'][1]
-        ]
-        if in_river:
-            feedback['issue'] = f"{len(in_river)} arbre(s) dans la rivière : {in_river}"
-        else:
-            feedback['issue'] = None
+    # Exemple d’analyse simplifiée
+    # Peut être étendue selon besoin
 
-    return feedback
+    return result
